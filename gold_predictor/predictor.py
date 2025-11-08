@@ -325,9 +325,9 @@ def main():
     parser.add_argument(
         '--model-type',
         type=str,
-        default='logistic',
+        default='random_forest',
         choices=['logistic', 'random_forest'],
-        help='Type of model to train (default: logistic)'
+        help='Type of model to train (default: random_forest, recommended for best accuracy)'
     )
     
     parser.add_argument(

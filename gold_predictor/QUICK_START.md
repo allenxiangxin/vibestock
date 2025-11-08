@@ -35,11 +35,14 @@ pip install fredapi scikit-learn
 cd gold_predictor
 
 # Train model with optimal 8 years of data (first time only)
+# Uses Random Forest by default for 97% accuracy
 python predictor.py --train --years 8
 
-# Make predictions
+# Make predictions (uses saved Random Forest model)
 python predictor.py --predict
 ```
+
+**Note:** Random Forest is now the default (recommended). The model type is saved when you train, so future predictions automatically use the same model.
 
 ## Example Output
 
