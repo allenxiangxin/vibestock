@@ -23,7 +23,44 @@ from feature_engineering import engineer_all_features, select_features_for_model
 from model import GoldPricePredictor, evaluate_model
 
 
-def train_model(lookback_years: int = 8, model_type: str = 'logistic', 
+def train_all_models(lookback_years: int = 8):
+    """
+    Train ALL model types (logistic + random_forest) for comparison.
+    
+    Args:
+        lookback_years: Years of historical data to use
+    """
+    print(f"\n{'='*80}")
+    print("GOLD PRICE PREDICTOR - TRAINING ALL MODELS")
+    print(f"{'='*80}\n")
+    print(f"Training both Logistic Regression and Random Forest...")
+    print(f"Lookback: {lookback_years} years\n")
+    
+    models_trained = {}
+    
+    for model_type in ['logistic', 'random_forest']:
+        print(f"\n{'#'*80}")
+        print(f"# TRAINING: {model_type.upper()}")
+        print(f"{'#'*80}\n")
+        
+        save_path = f'models/gold_predictor_{model_type}.pkl'
+        predictor = train_model(lookback_years, model_type, save_path)
+        
+        if predictor:
+            models_trained[model_type] = save_path
+    
+    print(f"\n{'='*80}")
+    print("✅ ALL MODELS TRAINED SUCCESSFULLY!")
+    print(f"{'='*80}")
+    print(f"\nModels saved:")
+    for model_type, path in models_trained.items():
+        print(f"  • {model_type:15s}: {path}")
+    print()
+    
+    return models_trained
+
+
+def train_model(lookback_years: int = 8, model_type: str = 'random_forest', 
                 save_path: str = 'models/gold_predictor.pkl'):
     """
     Train a new model from scratch.
@@ -116,43 +153,106 @@ def train_model(lookback_years: int = 8, model_type: str = 'logistic',
     return predictor
 
 
-def make_prediction(model_path: str = 'models/gold_predictor.pkl', 
-                   show_details: bool = True):
+def predict_all_models(show_details: bool = True):
     """
-    Make a prediction using a trained model.
+    Make predictions using ALL trained models for comparison.
     
     Args:
-        model_path: Path to saved model
         show_details: Whether to show detailed feature values
     """
     print(f"\n{'='*80}")
-    print("GOLD PRICE PREDICTOR - PREDICTION")
+    print("GOLD PRICE PREDICTOR - COMPARING ALL MODELS")
     print(f"{'='*80}\n")
     
+    model_paths = {
+        'logistic': 'models/gold_predictor_logistic.pkl',
+        'random_forest': 'models/gold_predictor_random_forest.pkl'
+    }
+    
+    # Fetch data ONCE and reuse for both models (avoid API rate limits)
+    print("Fetching latest data...")
+    try:
+        data = fetch_all_data(lookback_years=2)
+        df_merged = merge_all_data(data)
+        df_features = engineer_all_features(df_merged)
+        
+        if len(df_features) == 0:
+            print("\n❌ ERROR: No data available after feature engineering!")
+            return None
+            
+        print(f"✅ Data fetched successfully ({len(df_features)} observations)\n")
+    except Exception as e:
+        print(f"\n❌ ERROR fetching data: {e}")
+        return None
+    
+    predictions_by_model = {}
+    
+    for model_type, model_path in model_paths.items():
+        if os.path.exists(model_path):
+            print(f"\n{'─'*80}")
+            print(f"📊 {model_type.upper()} MODEL")
+            print(f"{'─'*80}")
+            result = make_prediction_with_data(model_path, df_features, show_details=False)
+            if result:
+                predictions_by_model[model_type] = result
+        else:
+            print(f"\n⚠️  {model_type.upper()} model not found at: {model_path}")
+    
+    if len(predictions_by_model) > 1:
+        print(f"\n{'='*80}")
+        print("📊 MODEL COMPARISON")
+        print(f"{'='*80}\n")
+        
+        horizons = ['short', 'mid', 'long']
+        horizon_names = {'short': '1 Week', 'mid': '1 Month', 'long': '3 Months'}
+        
+        for horizon in horizons:
+            print(f"{'─'*80}")
+            print(f"⏰ {horizon_names[horizon]} Predictions:")
+            print(f"{'─'*80}")
+            
+            for model_type in predictions_by_model.keys():
+                if horizon in predictions_by_model[model_type]:
+                    pred = predictions_by_model[model_type][horizon]
+                    direction = pred['prediction']
+                    conf = pred['confidence']
+                    icon = "⬆️" if direction == 'UP' else "⬇️"
+                    
+                    print(f"  {model_type:15s}: {icon} {direction:4s}  (Confidence: {conf:.1%})")
+            print()
+    
+    return predictions_by_model
+
+
+def make_prediction_with_data(model_path: str, df_features: pd.DataFrame, show_details: bool = True):
+    """
+    Make a prediction using a trained model with pre-fetched data.
+    
+    Args:
+        model_path: Path to saved model
+        df_features: Pre-fetched and engineered features DataFrame
+        show_details: Whether to show detailed feature values
+        
+    Returns:
+        Dictionary with predictions for each horizon
+    """
     # Load model
-    print(f"Loading model from: {model_path}")
     try:
         predictor = GoldPricePredictor.load_model(model_path)
     except FileNotFoundError:
-        print(f"\n❌ ERROR: Model file not found: {model_path}")
-        print("Please train a model first with: python predictor.py --train\n")
+        if show_details:
+            print(f"\n❌ ERROR: Model file not found: {model_path}")
         return None
     
-    # Fetch latest data (need 2 years for 200-day MA and other features)
-    print("\nFetching latest data...")
-    data = fetch_all_data(lookback_years=2)  # Need enough history for feature calculation
-    df_merged = merge_all_data(data)
-    
-    # Engineer features
-    print("\nEngineering features...")
-    df_features = engineer_all_features(df_merged)
-    
-    # Check if we have any data after feature engineering
-    if len(df_features) == 0:
-        print("\n❌ ERROR: No data available after feature engineering!")
-        print("This usually means:")
-        print("  - Not enough historical data to calculate features")
-        print("  - Try fetching more years of data")
+    # Check if all required features are present
+    missing_features = [f for f in predictor.feature_names if f not in df_features.columns]
+    if missing_features:
+        print(f"\n❌ ERROR: Required features missing from data: {missing_features}")
+        print(f"\nAvailable columns: {list(df_features.columns)}")
+        print("\nThis usually means:")
+        print("  - USD Index (UUP) data failed to download")
+        print("  - FRED economic data failed to download")
+        print("\nTry running again or check your API keys in .env file")
         return None
     
     # Get the most recent complete data point
@@ -160,45 +260,48 @@ def make_prediction(model_path: str = 'models/gold_predictor.pkl',
     latest_date = df_features['date'].iloc[-1]
     latest_price = df_features['close'].iloc[-1]
     
-    print(f"\nData as of: {latest_date.strftime('%Y-%m-%d')}")
-    print(f"Current gold price (GLD): ${latest_price:.2f}")
+    if show_details:
+        print(f"\nData as of: {latest_date.strftime('%Y-%m-%d')}")
+        print(f"Current gold price (GLD): ${latest_price:.2f}")
     
     # Make predictions
-    print("\n" + "="*80)
-    print("PREDICTIONS")
-    print("="*80 + "\n")
+    if show_details:
+        print("\n" + "="*80)
+        print("PREDICTIONS")
+        print("="*80 + "\n")
     
-    predictions = predictor.predict_all_horizons(latest_data)
+    horizons = ['short', 'mid', 'long']
+    horizon_names = {'short': '1 Week', 'mid': '1 Month', 'long': '3 Months'}
     
-    horizons_map = {
-        'short': '1 Week',
-        'mid': '1 Month',
-        'long': '3 Months'
-    }
+    predictions = {}
     
-    for horizon, pred in predictions.items():
-        horizon_name = horizons_map.get(horizon, horizon)
-        direction = pred['prediction']
-        prob_up = pred['probability_up']
-        prob_down = pred['probability_down']
-        confidence = pred['confidence']
-        
-        # Determine confidence level
-        if confidence >= 0.7:
-            conf_level = "HIGH"
-        elif confidence >= 0.6:
-            conf_level = "MEDIUM"
-        else:
-            conf_level = "LOW"
-        
-        # Format output
-        arrow = "📈" if direction == "UP" else "📉"
-        
-        print(f"{arrow} {horizon_name:10s} ({horizon.upper()}-term)")
-        print(f"   Prediction:  {direction}")
-        print(f"   Probability: {prob_up:.1%} UP  /  {prob_down:.1%} DOWN")
-        print(f"   Confidence:  {confidence:.1%} ({conf_level})")
-        print()
+    for horizon in horizons:
+        if horizon in predictor.models:
+            pred = predictor.predict(latest_data, horizon)
+            predictions[horizon] = pred
+            
+            if show_details:
+                direction = pred['prediction']
+                prob_up = pred['probability_up']
+                prob_down = pred['probability_down']
+                confidence = pred['confidence']
+                
+                # Determine confidence level
+                if confidence >= 0.70:
+                    conf_level = "HIGH"
+                elif confidence >= 0.60:
+                    conf_level = "MEDIUM"
+                else:
+                    conf_level = "LOW"
+                
+                # Format output
+                arrow = "📈" if direction == "UP" else "📉"
+                
+                print(f"{arrow} {horizon_names[horizon]:10s} ({horizon.upper()}-term)")
+                print(f"   Prediction:  {direction}")
+                print(f"   Probability: {prob_up:.1%} UP  /  {prob_down:.1%} DOWN")
+                print(f"   Confidence:  {confidence:.1%} ({conf_level})")
+                print()
     
     # Show key features if requested
     if show_details:
@@ -221,10 +324,10 @@ def make_prediction(model_path: str = 'models/gold_predictor.pkl',
                 value = latest_data[feat].iloc[0]
                 print(f"  {name:30s}: {value:8.2f}")
     
-    print("\n" + "="*80)
-    print("INTERPRETATION GUIDE")
-    print("="*80)
-    print("""
+        print("\n" + "="*80)
+        print("INTERPRETATION GUIDE")
+        print("="*80)
+        print("""
 Gold Typically Rises When:
   ↓ Real interest rates fall (negative is bullish)
   ↓ USD weakens (negative return is bullish for gold)
@@ -238,10 +341,107 @@ Gold Typically Falls When:
   ↓ Inflation expectations decrease
   ↓ VIX decreases (calm markets)
   ↑ Fed raises rates aggressively
-    """)
-    print("="*80 + "\n")
+""")
+        print("="*80 + "\n")
     
     return predictions
+
+
+def make_prediction(model_path: str = 'models/gold_predictor.pkl', 
+                   show_details: bool = True):
+    """
+    Make a prediction using a trained model.
+    
+    Args:
+        model_path: Path to saved model
+        show_details: Whether to show detailed feature values
+    """
+    if show_details:
+        print(f"\n{'='*80}")
+        print("GOLD PRICE PREDICTOR - PREDICTION")
+        print(f"{'='*80}\n")
+        print(f"Loading model from: {model_path}")
+    
+    # Fetch latest data (need 2 years for 200-day MA and other features)
+    if show_details:
+        print("\nFetching latest data...")
+    
+    try:
+        data = fetch_all_data(lookback_years=2)  # Need enough history for feature calculation
+        df_merged = merge_all_data(data)
+        
+        if show_details:
+            print("\nEngineering features...")
+        df_features = engineer_all_features(df_merged)
+        
+        # Check if we have any data after feature engineering
+        if len(df_features) == 0:
+            print("\n❌ ERROR: No data available after feature engineering!")
+            print("This usually means:")
+            print("  - Not enough historical data to calculate features")
+            print("  - Try fetching more years of data")
+            return None
+    except Exception as e:
+        print(f"\n❌ ERROR fetching/processing data: {e}")
+        return None
+    
+    # Use the helper function with the fetched data
+    return make_prediction_with_data(model_path, df_features, show_details)
+
+
+def evaluate_all_models():
+    """
+    Evaluate ALL trained models and compare their performance.
+    """
+    print(f"\n{'='*80}")
+    print("GOLD PRICE PREDICTOR - EVALUATING ALL MODELS")
+    print(f"{'='*80}\n")
+    
+    model_paths = {
+        'Logistic Regression': 'models/gold_predictor_logistic.pkl',
+        'Random Forest': 'models/gold_predictor_random_forest.pkl'
+    }
+    
+    results_by_model = {}
+    
+    for model_name, model_path in model_paths.items():
+        if os.path.exists(model_path):
+            print(f"\n{'#'*80}")
+            print(f"# EVALUATING: {model_name.upper()}")
+            print(f"{'#'*80}\n")
+            result = evaluate_existing_model(model_path)
+            if result:
+                results_by_model[model_name] = result
+        else:
+            print(f"\n⚠️  {model_name} model not found at: {model_path}")
+            print(f"    Train it with: python predictor.py --train --model-type {model_name.lower().replace(' ', '_')}\n")
+    
+    # Print comparison summary
+    if len(results_by_model) > 1:
+        print(f"\n{'='*80}")
+        print("📊 MODEL ACCURACY COMPARISON")
+        print(f"{'='*80}\n")
+        
+        horizons = {'short': '1 Week', 'mid': '1 Month', 'long': '3 Months'}
+        
+        print(f"{'Time Horizon':<20} {'Logistic Regression':<25} {'Random Forest':<25}")
+        print(f"{'-'*70}")
+        
+        for horizon, horizon_name in horizons.items():
+            line = f"{horizon_name:<20}"
+            
+            for model_name in ['Logistic Regression', 'Random Forest']:
+                if model_name in results_by_model and horizon in results_by_model[model_name]:
+                    accuracy = results_by_model[model_name][horizon]
+                    line += f" {accuracy:>6.1%}                  "
+                else:
+                    line += f" {'N/A':>6}                  "
+            
+            print(line)
+        
+        print()
+    
+    return results_by_model
 
 
 def evaluate_existing_model(model_path: str = 'models/gold_predictor.pkl'):
@@ -290,6 +490,23 @@ def evaluate_existing_model(model_path: str = 'models/gold_predictor.pkl'):
     
     # Evaluate
     evaluate_model(predictor, X_test, y_test_dict)
+    
+    # Calculate and return accuracy for each horizon
+    accuracies = {}
+    for horizon in predictor.models.keys():
+        y_test = y_test_dict[horizon]
+        model = predictor.models[horizon]
+        scaler = predictor.scalers[horizon]
+        
+        X_test_aligned = X_test[predictor.feature_names]
+        X_test_scaled = scaler.transform(X_test_aligned)
+        y_pred = model.predict(X_test_scaled)
+        
+        from sklearn.metrics import accuracy_score
+        accuracy = accuracy_score(y_test, y_pred)
+        accuracies[horizon] = accuracy
+    
+    return accuracies
 
 
 def main():
@@ -320,6 +537,12 @@ def main():
         '--retrain',
         action='store_true',
         help='Retrain model with latest data'
+    )
+    
+    parser.add_argument(
+        '--all-models',
+        action='store_true',
+        help='Train/predict/evaluate ALL model types (logistic + random_forest) for comparison'
     )
     
     parser.add_argument(
@@ -360,18 +583,30 @@ def main():
         return
     
     try:
-        if args.train or args.retrain:
-            train_model(
-                lookback_years=args.years,
-                model_type=args.model_type,
-                save_path=args.model_path
-            )
-        
-        if args.predict:
-            make_prediction(model_path=args.model_path)
-        
-        if args.evaluate:
-            evaluate_existing_model(model_path=args.model_path)
+        # Handle --all-models flag
+        if args.all_models:
+            if args.train or args.retrain:
+                train_all_models(lookback_years=args.years)
+            elif args.predict:
+                predict_all_models(show_details=True)
+            elif args.evaluate:
+                evaluate_all_models()
+            else:
+                print("\n⚠️  --all-models requires --train, --predict, or --evaluate\n")
+        else:
+            # Single model mode
+            if args.train or args.retrain:
+                train_model(
+                    lookback_years=args.years,
+                    model_type=args.model_type,
+                    save_path=args.model_path
+                )
+            
+            if args.predict:
+                make_prediction(model_path=args.model_path)
+            
+            if args.evaluate:
+                evaluate_existing_model(model_path=args.model_path)
             
     except KeyboardInterrupt:
         print("\n\n⚠️  Interrupted by user")

@@ -31,6 +31,8 @@ pip install fredapi scikit-learn
 
 ## Step 3: Train & Predict (5 minutes first time, 30 seconds after)
 
+### Option A: Single Model (Recommended for Beginners)
+
 ```bash
 cd gold_predictor
 
@@ -43,6 +45,20 @@ python predictor.py --predict
 ```
 
 **Note:** Random Forest is now the default (recommended). The model type is saved when you train, so future predictions automatically use the same model.
+
+### Option B: Compare ALL Models (For Advanced Users)
+
+Train BOTH Logistic Regression and Random Forest to compare:
+
+```bash
+# Train BOTH models (takes 6-10 minutes)
+python predictor.py --train --all-models --years 8
+
+# Get predictions from BOTH models with side-by-side comparison
+python predictor.py --predict --all-models
+```
+
+This shows you how both models compare and gives you more confidence when they agree!
 
 ## Example Output
 
@@ -105,19 +121,38 @@ python predictor.py --retrain
 python predictor.py --evaluate
 ```
 
-### Compare Models
+### Compare ALL Models (Logistic vs Random Forest)
+
+Train and compare BOTH model types to see which performs better:
+
 ```bash
-# Train with different periods (optimal: 8 years)
-python predictor.py --train --years 8 --model-path models/gold_8y.pkl
-python predictor.py --train --years 5 --model-path models/gold_5y.pkl
+# Train BOTH models at once (takes 6-10 minutes)
+python predictor.py --train --all-models --years 8
 
-# Or try random forest
-python predictor.py --train --years 8 --model-type random_forest
+# Get predictions from BOTH models with comparison
+python predictor.py --predict --all-models
 
-# Compare predictions
-python predictor.py --predict --model-path models/gold_8y.pkl
-python predictor.py --predict --model-path models/gold_5y.pkl
+# Evaluate BOTH models with accuracy comparison
+python predictor.py --evaluate --all-models
 ```
+
+**Example comparison output:**
+```
+📊 MODEL COMPARISON
+────────────────────────────────────────────────────────────────
+⏰ 1 Week Predictions:
+────────────────────────────────────────────────────────────────
+  logistic       : ⬆️ UP    (Confidence: 67.3%)
+  random_forest  : ⬆️ UP    (Confidence: 92.1%)
+```
+
+**When to use:**
+- ✅ **Both agree** → High confidence signal!
+- ⚠️ **Models disagree** → Market is uncertain, be cautious
+- 📊 **For trading** → Use Random Forest (97% accuracy)
+- 📈 **For analysis** → Use Logistic (see feature importance)
+
+See **[ALL_MODELS_GUIDE.md](ALL_MODELS_GUIDE.md)** for complete guide.
 
 ## Tips
 
@@ -143,7 +178,9 @@ https://fred.stlouisfed.org/docs/api/api_key.html
 ## Full Documentation
 
 - **[README.md](README.md)** - Complete documentation
+- **[ALL_MODELS_GUIDE.md](ALL_MODELS_GUIDE.md)** - Compare all models (Logistic vs Random Forest)
 - **[INTERPRETATION_GUIDE.md](docs/INTERPRETATION_GUIDE.md)** - Deep dive into economics
+- **[USAGE.md](USAGE.md)** - Daily usage guide
 
 ---
 
