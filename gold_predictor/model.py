@@ -3,6 +3,7 @@ Gold Predictor - Statistical Model Module
 
 Trains and evaluates models for gold price direction prediction.
 Uses logistic regression for interpretability and random forest for accuracy.
+Includes SMOTE for handling class imbalance.
 """
 
 import pandas as pd
@@ -15,6 +16,15 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import pickle
 import os
+
+# Try to import SMOTE for handling class imbalance
+try:
+    from imblearn.over_sampling import SMOTE
+    SMOTE_AVAILABLE = True
+except ImportError:
+    SMOTE_AVAILABLE = False
+    print("⚠️  WARNING: imbalanced-learn not installed. Class balancing with SMOTE unavailable.")
+    print("   Install with: pip install imbalanced-learn")
 
 
 class GoldPricePredictor:
@@ -36,7 +46,7 @@ class GoldPricePredictor:
         self.feature_importance = {}
         
     def train(self, X: pd.DataFrame, y_dict: Dict[str, pd.Series], 
-              test_size: float = 0.2, random_state: int = 42):
+              test_size: float = 0.2, random_state: int = 42, use_smote: bool = True):
         """
         Train models for each time horizon.
         
@@ -109,7 +119,30 @@ class GoldPricePredictor:
                     class_weight='balanced'
                 )
             
-            model.fit(X_train_scaled, y_train)
+            # Apply SMOTE if available and requested (only for training data)
+            X_train_final = X_train_scaled
+            y_train_final = y_train
+            
+            if use_smote and SMOTE_AVAILABLE and len(unique_classes) == 2:
+                # Count samples in each class
+                class_counts = y_train.value_counts()
+                min_samples = class_counts.min()
+                
+                # Only apply SMOTE if we have enough samples in minority class
+                if min_samples >= 6:  # SMOTE needs at least 6 samples for k_neighbors=5
+                    try:
+                        smote = SMOTE(random_state=random_state, k_neighbors=min(5, min_samples-1))
+                        X_train_final, y_train_final = smote.fit_resample(X_train_scaled, y_train)
+                        print(f"   🔄 SMOTE applied: {len(y_train)} → {len(y_train_final)} samples")
+                        print(f"      Class balance: DOWN={sum(y_train_final==0)}, UP={sum(y_train_final==1)}")
+                    except Exception as e:
+                        print(f"   ⚠️  SMOTE failed: {e}, using original data")
+                        X_train_final = X_train_scaled
+                        y_train_final = y_train
+                else:
+                    print(f"   ⚠️  SMOTE skipped: minority class has only {min_samples} samples (need 6+)")
+            
+            model.fit(X_train_final, y_train_final)
             
             # Evaluate
             y_pred_train = model.predict(X_train_scaled)
@@ -318,10 +351,24 @@ def evaluate_model(predictor: GoldPricePredictor, X_test: pd.DataFrame,
         # Confusion matrix
         cm = confusion_matrix(y_test, y_pred)
         print("\nConfusion Matrix:")
-        print(f"                  Predicted")
-        print(f"                  Down    Up")
-        print(f"Actual    Down    {cm[0,0]:4d}  {cm[0,1]:4d}")
-        print(f"          Up      {cm[1,0]:4d}  {cm[1,1]:4d}")
+        
+        # Check if we have both classes
+        unique_labels = np.unique(np.concatenate([y_test, y_pred]))
+        if len(unique_labels) == 2 and cm.shape == (2, 2):
+            # Full 2x2 matrix
+            print(f"                  Predicted")
+            print(f"                  Down    Up")
+            print(f"Actual    Down    {cm[0,0]:4d}  {cm[0,1]:4d}")
+            print(f"          Up      {cm[1,0]:4d}  {cm[1,1]:4d}")
+        elif len(unique_labels) == 1:
+            # Only one class present
+            label_name = "Down" if unique_labels[0] == 0 else "Up"
+            print(f"⚠️  WARNING: Only one class present in test set ({label_name})")
+            print(f"All predictions: {label_name}  Count: {cm[0,0]:4d}")
+        else:
+            # Fallback
+            print(f"Shape: {cm.shape}")
+            print(cm)
         
         # Top features
         print("\nTop 10 Most Important Features:")

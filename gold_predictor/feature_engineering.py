@@ -102,7 +102,7 @@ def calculate_real_interest_rate(df: pd.DataFrame) -> pd.DataFrame:
 
 def calculate_momentum_indicators(df: pd.DataFrame, column: str) -> pd.DataFrame:
     """
-    Calculate momentum indicators (RSI, MACD).
+    Calculate momentum indicators (RSI, MACD, ROC, Williams %R).
     
     Args:
         df: DataFrame with price data
@@ -126,6 +126,83 @@ def calculate_momentum_indicators(df: pd.DataFrame, column: str) -> pd.DataFrame
     result[f'{column}_macd'] = exp1 - exp2
     result[f'{column}_macd_signal'] = result[f'{column}_macd'].ewm(span=9, adjust=False).mean()
     result[f'{column}_macd_hist'] = result[f'{column}_macd'] - result[f'{column}_macd_signal']
+    
+    # Rate of Change (ROC)
+    result[f'{column}_roc_5'] = result[column].pct_change(5) * 100
+    result[f'{column}_roc_10'] = result[column].pct_change(10) * 100
+    
+    # Williams %R (14-period)
+    if 'high' in result.columns and 'low' in result.columns:
+        high_14 = result['high'].rolling(14).max()
+        low_14 = result['low'].rolling(14).min()
+        result[f'{column}_williams_r'] = -100 * (high_14 - result[column]) / (high_14 - low_14 + 1e-10)
+    
+    return result
+
+
+def calculate_bollinger_bands(df: pd.DataFrame, column: str, window: int = 20) -> pd.DataFrame:
+    """
+    Calculate Bollinger Bands.
+    
+    Args:
+        df: DataFrame with price data
+        column: Price column name
+        window: Rolling window size (default 20)
+        
+    Returns:
+        DataFrame with Bollinger Band features
+    """
+    result = df.copy()
+    
+    # Middle band (SMA)
+    result[f'{column}_bb_middle'] = result[column].rolling(window).mean()
+    
+    # Standard deviation
+    result[f'{column}_bb_std'] = result[column].rolling(window).std()
+    
+    # Upper and lower bands
+    result[f'{column}_bb_upper'] = result[f'{column}_bb_middle'] + 2 * result[f'{column}_bb_std']
+    result[f'{column}_bb_lower'] = result[f'{column}_bb_middle'] - 2 * result[f'{column}_bb_std']
+    
+    # Position within bands (0 = at lower, 1 = at upper)
+    band_width = result[f'{column}_bb_upper'] - result[f'{column}_bb_lower']
+    result[f'{column}_bb_position'] = (result[column] - result[f'{column}_bb_lower']) / (band_width + 1e-10)
+    
+    # Bandwidth (volatility indicator)
+    result[f'{column}_bb_width'] = band_width / (result[f'{column}_bb_middle'] + 1e-10)
+    
+    return result
+
+
+def calculate_volume_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate volume-based features.
+    
+    Args:
+        df: DataFrame with volume data
+        
+    Returns:
+        DataFrame with volume features added
+    """
+    result = df.copy()
+    
+    if 'volume' not in result.columns:
+        return result
+    
+    # Volume moving averages
+    result['volume_ma_20'] = result['volume'].rolling(20).mean()
+    result['volume_ma_50'] = result['volume'].rolling(50).mean()
+    
+    # Volume ratio (current vs average)
+    result['volume_ratio'] = result['volume'] / (result['volume_ma_20'] + 1e-10)
+    
+    # Volume trend (short MA vs long MA)
+    result['volume_trend'] = result['volume_ma_20'] / (result['volume_ma_50'] + 1e-10)
+    
+    # On-Balance Volume (OBV) - cumulative volume-weighted price direction
+    price_direction = np.sign(result['close'].diff())
+    result['obv'] = (result['volume'] * price_direction).cumsum()
+    result['obv_ma_20'] = result['obv'].rolling(20).mean()
     
     return result
 
@@ -180,8 +257,14 @@ def engineer_all_features(df: pd.DataFrame) -> pd.DataFrame:
     print("  • Gold moving averages...")
     result = calculate_moving_averages(result, 'close', [7, 30, 90, 200])
     
-    print("  • Gold momentum indicators...")
+    print("  • Gold momentum indicators (RSI, MACD, ROC, Williams %R)...")
     result = calculate_momentum_indicators(result, 'close')
+    
+    print("  • Bollinger Bands...")
+    result = calculate_bollinger_bands(result, 'close', window=20)
+    
+    print("  • Volume features...")
+    result = calculate_volume_features(result)
     
     # 2. USD Index features
     if 'usd_close' in result.columns:
@@ -269,7 +352,10 @@ def select_features_for_model(df: pd.DataFrame, target: str) -> Tuple[pd.DataFra
     # Define feature groups
     gold_features = [
         'close_return_7d', 'close_return_30d',
-        'close_vol_30d', 'close_rsi', 'close_macd_hist'
+        'close_vol_30d', 'close_rsi', 'close_macd_hist',
+        'close_roc_5', 'close_roc_10', 'close_williams_r',
+        'close_bb_position', 'close_bb_width',
+        'volume_ratio', 'volume_trend', 'obv_ma_20'
     ]
     
     usd_features = [
