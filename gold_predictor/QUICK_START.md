@@ -34,8 +34,8 @@ pip install fredapi scikit-learn
 ```bash
 cd gold_predictor
 
-# Train model (first time only)
-python predictor.py --train
+# Train model with optimal 8 years of data (first time only)
+python predictor.py --train --years 8
 
 # Make predictions
 python predictor.py --predict
@@ -104,12 +104,16 @@ python predictor.py --evaluate
 
 ### Compare Models
 ```bash
-# Train random forest
-python predictor.py --train --model-type random_forest
+# Train with different periods (optimal: 8 years)
+python predictor.py --train --years 8 --model-path models/gold_8y.pkl
+python predictor.py --train --years 5 --model-path models/gold_5y.pkl
+
+# Or try random forest
+python predictor.py --train --years 8 --model-type random_forest
 
 # Compare predictions
-python predictor.py --predict --model-path models/gold_predictor.pkl
-python predictor.py --predict --model-path models/gold_predictor_rf.pkl
+python predictor.py --predict --model-path models/gold_8y.pkl
+python predictor.py --predict --model-path models/gold_5y.pkl
 ```
 
 ## Tips
@@ -130,8 +134,8 @@ https://fred.stlouisfed.org/docs/api/api_key.html
 
 ### Low accuracy
 - Try random forest: `--model-type random_forest`
-- Train with more data: `--years 10`
-- Add FRED API key for more features
+- Adjust training period: `--years 5` (recent) or `--years 10` (more data)
+- Add FRED API key for more features (recommended: 8 years optimal)
 
 ## Full Documentation
 

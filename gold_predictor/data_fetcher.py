@@ -296,7 +296,7 @@ def merge_all_data(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     
     # Forward fill missing values (economic data is often monthly/quarterly)
     numeric_cols = df.select_dtypes(include=[np.number]).columns
-    df[numeric_cols] = df[numeric_cols].fillna(method='ffill')
+    df[numeric_cols] = df[numeric_cols].ffill()  # Use ffill() instead of deprecated fillna(method='ffill')
     
     # Drop rows with any remaining NaN
     initial_len = len(df)

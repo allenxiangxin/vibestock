@@ -23,7 +23,7 @@ from feature_engineering import engineer_all_features, select_features_for_model
 from model import GoldPricePredictor, evaluate_model
 
 
-def train_model(lookback_years: int = 7, model_type: str = 'logistic', 
+def train_model(lookback_years: int = 8, model_type: str = 'logistic', 
                 save_path: str = 'models/gold_predictor.pkl'):
     """
     Train a new model from scratch.
@@ -138,14 +138,22 @@ def make_prediction(model_path: str = 'models/gold_predictor.pkl',
         print("Please train a model first with: python predictor.py --train\n")
         return None
     
-    # Fetch latest data
+    # Fetch latest data (need 2 years for 200-day MA and other features)
     print("\nFetching latest data...")
-    data = fetch_all_data(lookback_years=1)  # Just need recent data
+    data = fetch_all_data(lookback_years=2)  # Need enough history for feature calculation
     df_merged = merge_all_data(data)
     
     # Engineer features
     print("\nEngineering features...")
     df_features = engineer_all_features(df_merged)
+    
+    # Check if we have any data after feature engineering
+    if len(df_features) == 0:
+        print("\n❌ ERROR: No data available after feature engineering!")
+        print("This usually means:")
+        print("  - Not enough historical data to calculate features")
+        print("  - Try fetching more years of data")
+        return None
     
     # Get the most recent complete data point
     latest_data = df_features[predictor.feature_names].iloc[[-1]]
@@ -325,8 +333,8 @@ def main():
     parser.add_argument(
         '--years',
         type=int,
-        default=7,
-        help='Years of historical data for training (default: 7, recommend 7-10 for better class balance)'
+        default=8,
+        help='Years of historical data for training (default: 8, optimal range: 7-10 years)'
     )
     
     parser.add_argument(
