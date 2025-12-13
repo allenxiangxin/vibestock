@@ -2,7 +2,8 @@
 Gold Predictor - Statistical Model Module
 
 Trains and evaluates models for gold price direction prediction.
-Uses logistic regression for interpretability and random forest for accuracy.
+Uses logistic regression for interpretability, random forest for accuracy,
+and gradient boosting (GBDT) for maximum performance.
 Includes SMOTE for handling class imbalance.
 """
 
@@ -11,7 +12,7 @@ import numpy as np
 from typing import Dict, Tuple, Optional
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import pickle
@@ -37,7 +38,7 @@ class GoldPricePredictor:
         Initialize the predictor.
         
         Args:
-            model_type: 'logistic' or 'random_forest'
+            model_type: 'logistic', 'random_forest', or 'gbdt'
         """
         self.model_type = model_type
         self.models = {}  # One model per time horizon
@@ -111,13 +112,25 @@ class GoldPricePredictor:
                     random_state=random_state,
                     class_weight='balanced'
                 )
-            else:  # random_forest
+            elif self.model_type == 'random_forest':
                 model = RandomForestClassifier(
                     n_estimators=100,
                     max_depth=10,
                     random_state=random_state,
                     class_weight='balanced'
                 )
+            elif self.model_type == 'gbdt':
+                model = GradientBoostingClassifier(
+                    n_estimators=100,
+                    learning_rate=0.1,
+                    max_depth=5,
+                    min_samples_split=20,
+                    min_samples_leaf=10,
+                    subsample=0.8,
+                    random_state=random_state
+                )
+            else:
+                raise ValueError(f"Unknown model_type: {self.model_type}")
             
             # Apply SMOTE if available and requested (only for training data)
             X_train_final = X_train_scaled
@@ -178,7 +191,7 @@ class GoldPricePredictor:
             # Get feature importance
             if self.model_type == 'logistic':
                 importance = np.abs(model.coef_[0])
-            else:
+            else:  # random_forest or gbdt
                 importance = model.feature_importances_
             
             self.feature_importance[horizon] = dict(zip(self.feature_names, importance))

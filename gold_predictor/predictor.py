@@ -25,7 +25,7 @@ from model import GoldPricePredictor, evaluate_model
 
 def train_all_models(lookback_years: int = 8):
     """
-    Train ALL model types (logistic + random_forest) for comparison.
+    Train ALL model types (logistic + random_forest + gbdt) for comparison.
     
     Args:
         lookback_years: Years of historical data to use
@@ -33,12 +33,12 @@ def train_all_models(lookback_years: int = 8):
     print(f"\n{'='*80}")
     print("GOLD PRICE PREDICTOR - TRAINING ALL MODELS")
     print(f"{'='*80}\n")
-    print(f"Training both Logistic Regression and Random Forest...")
+    print(f"Training Logistic Regression, Random Forest, and GBDT...")
     print(f"Lookback: {lookback_years} years\n")
     
     models_trained = {}
     
-    for model_type in ['logistic', 'random_forest']:
+    for model_type in ['logistic', 'random_forest', 'gbdt']:
         print(f"\n{'#'*80}")
         print(f"# TRAINING: {model_type.upper()}")
         print(f"{'#'*80}\n")
@@ -166,7 +166,8 @@ def predict_all_models(show_details: bool = True):
     
     model_paths = {
         'logistic': 'models/gold_predictor_logistic.pkl',
-        'random_forest': 'models/gold_predictor_random_forest.pkl'
+        'random_forest': 'models/gold_predictor_random_forest.pkl',
+        'gbdt': 'models/gold_predictor_gbdt.pkl'
     }
     
     # Fetch data ONCE and reuse for both models (avoid API rate limits)
@@ -399,7 +400,8 @@ def evaluate_all_models():
     
     model_paths = {
         'Logistic Regression': 'models/gold_predictor_logistic.pkl',
-        'Random Forest': 'models/gold_predictor_random_forest.pkl'
+        'Random Forest': 'models/gold_predictor_random_forest.pkl',
+        'GBDT': 'models/gold_predictor_gbdt.pkl'
     }
     
     results_by_model = {}
@@ -424,18 +426,28 @@ def evaluate_all_models():
         
         horizons = {'short': '1 Week', 'mid': '1 Month', 'long': '3 Months'}
         
-        print(f"{'Time Horizon':<20} {'Logistic Regression':<25} {'Random Forest':<25}")
+        print(f"{'Time Horizon':<20} {'Logistic':<15} {'Random Forest':<18} {'GBDT':<15}")
         print(f"{'-'*70}")
         
         for horizon, horizon_name in horizons.items():
             line = f"{horizon_name:<20}"
             
-            for model_name in ['Logistic Regression', 'Random Forest']:
+            for model_name in ['Logistic Regression', 'Random Forest', 'GBDT']:
                 if model_name in results_by_model and horizon in results_by_model[model_name]:
                     accuracy = results_by_model[model_name][horizon]
-                    line += f" {accuracy:>6.1%}                  "
+                    if model_name == 'Logistic Regression':
+                        line += f" {accuracy:>6.1%}        "
+                    elif model_name == 'Random Forest':
+                        line += f" {accuracy:>6.1%}           "
+                    else:  # GBDT
+                        line += f" {accuracy:>6.1%}        "
                 else:
-                    line += f" {'N/A':>6}                  "
+                    if model_name == 'Logistic Regression':
+                        line += f" {'N/A':>6}        "
+                    elif model_name == 'Random Forest':
+                        line += f" {'N/A':>6}           "
+                    else:  # GBDT
+                        line += f" {'N/A':>6}        "
             
             print(line)
         
@@ -542,15 +554,15 @@ def main():
     parser.add_argument(
         '--all-models',
         action='store_true',
-        help='Train/predict/evaluate ALL model types (logistic + random_forest) for comparison'
+        help='Train/predict/evaluate ALL model types (logistic + random_forest + gbdt) for comparison'
     )
     
     parser.add_argument(
         '--model-type',
         type=str,
         default='random_forest',
-        choices=['logistic', 'random_forest'],
-        help='Type of model to train (default: random_forest, recommended for best accuracy)'
+        choices=['logistic', 'random_forest', 'gbdt'],
+        help='Type of model to train (default: random_forest, gbdt often performs best)'
     )
     
     parser.add_argument(

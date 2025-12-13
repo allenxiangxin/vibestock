@@ -1,6 +1,6 @@
 # vibestock
 
-Three powerful tools for stock and commodities analysis using professional-grade data.
+Four powerful tools for stock and commodities analysis using professional-grade data and machine learning.
 
 ## Projects
 
@@ -13,6 +13,17 @@ python main.py
 ```
 
 [Learn more →](sp500_analyzer/)
+
+### 📈 S&P 500 Predictor
+Predict S&P 500 direction using machine learning models based on technical analysis, economic fundamentals, market sentiment, and liquidity flows.
+
+```bash
+cd sp500_predictor
+python predictor.py --train
+python predictor.py --predict
+```
+
+[Learn more →](sp500_predictor/)
 
 ### 🥇 Gold Tracker
 Monitor gold prices with MACD technical indicator and get desktop notifications for buy signals.
@@ -45,13 +56,20 @@ conda activate vibestock
 pip install -r requirements.txt
 ```
 
-### 2. Configure API Key
+### 2. Configure API Keys
 
-Get a free API key from [polygon.io](https://polygon.io), then:
+Get free API keys:
+- **Polygon.io**: [polygon.io](https://polygon.io) - Stock/ETF data
+- **FRED**: [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html) - Economic indicators
+
+Then create a `.env` file:
 
 ```bash
-# Create .env file
-echo "POLYGON_API_KEY=your_api_key_here" > .env
+# Create .env file in vibestock directory
+cat > .env << EOF
+POLYGON_API_KEY=your_polygon_key_here
+FRED_API_KEY=your_fred_key_here
+EOF
 ```
 
 [Detailed setup guide →](docs/POLYGON_SETUP.md)
@@ -61,6 +79,7 @@ echo "POLYGON_API_KEY=your_api_key_here" > .env
 ```
 vibestock/
 ├── sp500_analyzer/     # S&P 500 return analysis
+├── sp500_predictor/    # S&P 500 ML predictor
 ├── gold_tracker/       # Gold price MACD tracker  
 ├── gold_predictor/     # Gold price ML predictor
 ├── docs/               # Shared documentation
@@ -71,6 +90,7 @@ vibestock/
 ## Documentation
 
 - **[S&P 500 Analyzer Guide](sp500_analyzer/README.md)** - Statistical return analysis
+- **[S&P 500 Predictor Guide](sp500_predictor/README.md)** - ML-based market prediction
 - **[Gold Tracker Guide](gold_tracker/README.md)** - MACD technical analysis  
 - **[Gold Predictor Guide](gold_predictor/README.md)** - ML-based fundamental analysis
 - **[Polygon.io Setup](docs/POLYGON_SETUP.md)** - API configuration guide
@@ -80,7 +100,7 @@ vibestock/
 
 - Python 3.8+
 - Polygon.io API key (free tier available)
-- FRED API key (optional, for gold predictor - improves accuracy)
+- FRED API key (free, required for predictors)
 - See [requirements.txt](requirements.txt) for packages
 
 ## License
